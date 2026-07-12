@@ -82,22 +82,29 @@ webhook_url = st.sidebar.text_input(
 if webhook_url:
     os.environ["WEBHOOK_URL"] = webhook_url
 
-sendgrid_api_key = st.sidebar.text_input(
-    "SendGrid API Key (for real emails, optional)",
+gmail_user = st.sidebar.text_input(
+    "Gmail Address (for real emails, optional)",
+    value="",
+    placeholder="you@gmail.com"
+)
+if gmail_user:
+    os.environ["GMAIL_USER"] = gmail_user
+
+gmail_app_password = st.sidebar.text_input(
+    "Gmail App Password (for real emails, optional)",
     value="",
     type="password",
-    placeholder="SG.xxx..."
+    placeholder="xxxx xxxx xxxx xxxx"
 )
-if sendgrid_api_key:
-    os.environ["SENDGRID_API_KEY"] = sendgrid_api_key
+if gmail_app_password:
+    os.environ["GMAIL_APP_PASSWORD"] = gmail_app_password
 
-from_email = st.sidebar.text_input(
-    "From Email (for real emails, optional)",
-    value="",
-    placeholder="you@example.com"
-)
-if from_email:
-    os.environ["FROM_EMAIL"] = from_email
+st.sidebar.info("""
+To get a Gmail App Password:
+1. Go to https://myaccount.google.com/security
+2. Enable 2-Step Verification
+3. Go to "App passwords" and create one
+""")
 
 # Thread ID
 query_params = st.query_params

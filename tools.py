@@ -143,39 +143,43 @@ def get_service_types() -> str:
 
 @tool
 def send_booking_notification(email: str, details: str) -> str:
-    """Send a booking confirmation notification (either via webhook or real email).
+    """Send a booking confirmation notification (either via Gmail or webhook).
 
     Args:
         email: The recipient's email address.
         details: A short human-readable summary of the booking.
     """
-    # First, try to send real email if SendGrid API key is available
-    sendgrid_api_key = os.environ.get("SENDGRID_API_KEY")
-    from_email = os.environ.get("FROM_EMAIL", "notifications@gigacorp.com")
+    # First, try to send real email via Gmail if credentials are available
+    gmail_user = os.environ.get("GMAIL_USER")
+    gmail_password = os.environ.get("GMAIL_APP_PASSWORD")
     
-    if sendgrid_api_key:
+    if gmail_user and gmail_password:
         try:
-            from sendgrid import SendGridAPIClient
-            from sendgrid.helpers.mail import Mail
+            import smtplib
+            from email.mime.text import MIMEText
+            from email.mime.multipart import MIMEMultipart
             
-            message = Mail(
-                from_email=from_email,
-                to_emails=email,
-                subject="Your GigaCorp Appointment Confirmation",
-                html_content=f"""
-                <h1>Appointment Confirmed!</h1>
-                <p>Hi there,</p>
-                <p>Your appointment has been booked successfully:</p>
-                <p><strong>{details}</strong></p>
-                <p>Thanks for booking with GigaCorp!</p>
-                """
-            )
-            sg = SendGridAPIClient(sendgrid_api_key)
-            response = sg.send(message)
+            message = MIMEMultipart()
+            message["From"] = gmail_user
+            message["To"] = email
+            message["Subject"] = "Your GigaCorp Appointment Confirmation"
+            
+            body = f"""
+            <h1>Appointment Confirmed!</h1>
+            <p>Hi there,</p>
+            <p>Your appointment has been booked successfully:</p>
+            <p><strong>{details}</strong></p>
+            <p>Thanks for booking with GigaCorp!</p>
+            """
+            message.attach(MIMEText(body, "html"))
+            
+            with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
+                server.login(gmail_user, gmail_password)
+                server.sendmail(gmail_user, email, message.as_string())
+            
             return json.dumps({
                 "success": True,
-                "method": "email",
-                "status_code": response.status_code
+                "method": "gmail",
             })
         except Exception as e:
             # If email fails, fall back to webhook
