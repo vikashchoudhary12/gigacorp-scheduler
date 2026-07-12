@@ -186,11 +186,13 @@ with tab1:
                 if isinstance(m, HumanMessage) and m.content == user_input
             )
             # Check for tool results to show alerts
+            latest_booking = None
             for msg in new_messages[turn_start + 1:]:
                 if isinstance(msg, ToolMessage):
                     try:
                         tool_result = json.loads(msg.content)
                         if msg.name == "reserve_slot" and tool_result.get("success"):
+                            latest_booking = tool_result
                             st.success(f"""
                             ✅ Booking Confirmed!
                             - Booking ID: {tool_result.get('booking_id')}
@@ -203,6 +205,17 @@ with tab1:
                             st.success(f"✅ {tool_result.get('message')}")
                     except:
                         pass
+            # Show download button if we have a new booking
+            if latest_booking:
+                ics = generate_ics(latest_booking)
+                st.download_button(
+                    label="📅 Add This Booking to Your Calendar",
+                    data=ics,
+                    file_name=f"gigacorp-booking-{latest_booking['booking_id']}.ics",
+                    mime="text/calendar"
+                )
+            # Now display all messages
+            for msg in new_messages[turn_start + 1:]:
                 if isinstance(msg, AIMessage) and msg.content:
                     with st.chat_message("assistant"):
                         st.markdown(msg.content)
@@ -211,6 +224,31 @@ with tab1:
                         st.json(msg.content)
         except Exception as e:
             st.error(f"Error: {e}")
+
+def generate_ics(booking):
+    """Generate an ICS calendar file for a booking"""
+    from datetime import datetime, timedelta
+    import uuid
+    
+    date_str = booking["date"]
+    time_str = booking["time"]
+    dt_start = datetime.strptime(f"{date_str} {time_str}", "%Y-%m-%d %H:%M")
+    dt_end = dt_start + timedelta(hours=1)  # Default 1-hour duration
+    
+    ics_content = f"""BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//GigaCorp Scheduler//EN
+BEGIN:VEVENT
+UID:{uuid.uuid4()}@gigacorp-scheduler
+DTSTAMP:{datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")}
+DTSTART:{dt_start.strftime("%Y%m%dT%H%M%S")}
+DTEND:{dt_end.strftime("%Y%m%dT%H%M%S")}
+SUMMARY:{booking['service_type']}
+DESCRIPTION:Booking ID: {booking['id']}
+ATTENDEE;CN={booking['email']}:mailto:{booking['email']}
+END:VEVENT
+END:VCALENDAR"""
+    return ics_content
 
 with tab2:
     st.subheader("📊 View Your Bookings")
@@ -230,6 +268,15 @@ with tab2:
                         st.markdown(f"**Status:** :{status_color}[{booking['status'].upper()}]")
                     with col_b:
                         if booking["status"] == "confirmed":
+                            # Download ICS button
+                            ics = generate_ics(booking)
+                            st.download_button(
+                                label="📅 Add to Calendar",
+                                data=ics,
+                                file_name=f"gigacorp-booking-{booking['id']}.ics",
+                                mime="text/calendar",
+                                key=f"ics_{booking['id']}"
+                            )
                             if st.button(f"❌ Cancel #{booking['id']}", key=f"cancel_{booking['id']}"):
                                 success, message = db.cancel_booking(booking["id"], email)
                                 if success:
