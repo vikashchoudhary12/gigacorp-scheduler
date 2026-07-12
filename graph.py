@@ -1,18 +1,7 @@
 """
-graph.py — the multi-agent LangGraph workflow.
+graph.py — enhanced multi-agent LangGraph workflow.
 
-Two agents:
-  * Triage: classifies each incoming message as "booking" or "general".
-    General messages get answered directly. Booking-intent messages are
-    routed to the Booking Specialist.
-  * Booking Specialist: a tool-calling agent bound to check_availability,
-    reserve_slot, and send_booking_notification. It loops with a ToolNode
-    until it has a final reply with no more tool calls.
-
-Input normalization: before the Booking Specialist ever sees the message,
-we run dateparser over it to resolve any relative date phrase ("tomorrow",
-"next Monday") into an absolute YYYY-MM-DD, and hand that resolution to the
-agent as a grounding fact — so it isn't relying on the LLM's own date math.
+Features: service types, cancellations, rescheduling, and more!
 """
 
 from datetime import datetime
@@ -24,7 +13,7 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.graph.message import add_messages
 from langgraph.prebuilt import ToolNode, tools_condition
 
-from tools import ALL_TOOLS, BUSINESS_HOURS as _BUSINESS_HOURS  # noqa: F401 (re-export for app.py)
+from tools import ALL_TOOLS, BUSINESS_HOURS as _BUSINESS_HOURS, SERVICE_TYPES as _SERVICE_TYPES  # noqa: F401
 
 
 class SchedulerState(TypedDict):
@@ -34,16 +23,16 @@ class SchedulerState(TypedDict):
 
 TRIAGE_CLASSIFY_PROMPT = (
     "You are a routing classifier for a scheduling assistant. Read the user's "
-    "latest message and decide if they are trying to schedule, check, reschedule, "
-    "or book an appointment (route: BOOKING), or if it's a general question/greeting "
-    "unrelated to booking an appointment (route: GENERAL).\n\n"
+    "latest message and decide if they are trying to schedule, check, reschedule, cancel, "
+    "or book an appointment, or view their bookings (route: BOOKING), or if it's a general "
+    "question/greeting (route: GENERAL).\n\n"
     "Reply with exactly one word: BOOKING or GENERAL. Nothing else."
 )
 
 TRIAGE_GENERAL_PROMPT = (
-    "You are a friendly front-desk assistant for a scheduling service. Answer the "
-    "user's general question helpfully and briefly. If they seem to want to book, "
-    "check, or manage an appointment, let them know they can just ask to book one."
+    "You are a friendly front-desk assistant for a professional scheduling service. "
+    "Answer the user's general questions helpfully and briefly. If they seem to want to "
+    "book, check, reschedule, cancel, or view their appointments, guide them to do so."
 )
 
 
@@ -92,24 +81,26 @@ def make_booking_node(llm_with_tools):
         date_note = _resolve_dates_note(last_text)
 
         system_prompt = (
-            "You are the Booking Specialist for a scheduling service. "
-            f"Today's date is {today_str}. Business hours slots are: "
-            f"{', '.join(_BUSINESS_HOURS)} (24h format), Monday-Sunday.\n\n"
-            "Your job: collect a date, a time, and an email from the user, then book "
-            "the appointment. Rules:\n"
-            "1. Never call reserve_slot with a relative date like 'tomorrow' — always "
-            "resolve it to an absolute YYYY-MM-DD first. "
-            + (date_note + "\n" if date_note else "")
-            + "2. Before reserving, call check_availability for the date if you haven't "
-            "already confirmed the slot is free in this conversation.\n"
-            "3. If reserve_slot fails because the slot was just taken, do NOT give up — "
-            "look at the alternative_slots_same_day it returns and offer one or two of "
-            "them to the user, or ask if they'd like a different date. Never fail silently.\n"
-            "4. Once a slot is successfully reserved, call send_booking_notification to "
-            "confirm it, then tell the user their appointment is booked with the date, "
-            "time, and confirmation.\n"
-            "5. If you're missing the date, time, or email, ask the user for exactly "
-            "what's missing — don't guess."
+            "You are the Booking Specialist for a professional scheduling service. "
+            f"Today's date is {today_str}.\n"
+            f"Business hours slots: {', '.join(_BUSINESS_HOURS)} (24h format, Mon-Sun).\n"
+            f"Available service types: {', '.join(_SERVICE_TYPES)}.\n\n"
+            "Your responsibilities:\n"
+            "1. Book new appointments (need date, time, email, service type)\n"
+            "2. View existing bookings (by email)\n"
+            "3. Reschedule existing bookings\n"
+            "4. Cancel existing bookings\n\n"
+            "Rules:\n"
+            "- Never use relative dates for tools; always resolve to YYYY-MM-DD first\n"
+        )
+        if date_note:
+            system_prompt += date_note + "\n"
+        system_prompt += (
+            "- Always check availability before booking\n"
+            "- If a slot is taken, offer alternatives from alternative_slots_same_day\n"
+            "- After booking/rescheduling, send a confirmation notification\n"
+            "- When canceling/rescheduling, verify the booking_id and email match\n"
+            "- If missing info, ask the user clearly for exactly what's needed\n"
         )
         messages = [SystemMessage(content=system_prompt)] + state["messages"]
         reply = llm_with_tools.invoke(messages)

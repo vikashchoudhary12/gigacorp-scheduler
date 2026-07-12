@@ -1,10 +1,15 @@
-# GigaCorp Scheduling Assistant
+# 📅 Enhanced GigaCorp Scheduling Assistant
 
-A multi-agent appointment-scheduling assistant built with **LangGraph**. A Triage Agent
-routes each message; a Booking Specialist calls real (mocked) tools to check
-availability, reserve a slot, and send a confirmation — negotiating alternatives if a
-slot's taken, instead of failing silently. Conversation state persists in SQLite, keyed
-to a thread ID kept in the URL, so it survives a page refresh.
+A professional, multi-agent appointment-scheduling assistant built with **LangGraph** and **Streamlit**. Features include service types, cancellations, rescheduling, booking history, and a beautiful modern UI!
+
+## 🚀 New Features
+
+- **Service Types**: Choose from 5 pre-defined service options (General Consultation, Strategy Session, etc.)
+- **Cancel Bookings**: Cancel existing appointments directly
+- **View Bookings**: "My Bookings" tab to view all appointments by email
+- **Professional UI**: Modern interface with tabs, expandable sections, and clean layout
+- **Status Tracking**: Confirmed/Cancelled statuses with color coding
+- **Booking IDs**: Unique IDs for easy reference
 
 ## Architecture
 
@@ -20,94 +25,84 @@ to a thread ID kept in the URL, so it survives a page refresh.
      answers directly     ┌─────▼──────────┐
           │           ┌──>│ Booking         │
          END           │  │ Specialist      │
-                        │  └────┬───────────┘
-                        │       │ tool_calls present?
-                        │  ┌────▼────┐
-                        └──┤  Tools  │  (ToolNode)
-                           └─────────┘
-                        (loops back to Booking Specialist
-                         until a final reply with no more
-                         tool calls, then END)
+                      │  └────┬───────────┘
+                      │       │ tool_calls present?
+                      │  ┌────▼────┐
+                      └──┤  Tools  │  (ToolNode)
+                         └─────────┘
+                      (loops back to Booking Specialist
+                       until a final reply with no more
+                       tool calls, then END)
 ```
 
-- **Triage Agent** (`graph.py: make_triage_node`): one LLM call classifies the latest
-  user message as `BOOKING` or `GENERAL`. General messages get a direct, friendly reply
-  and the graph ends there — the Booking Specialist and its tools are never touched.
-  Booking-intent messages are routed onward.
-- **Booking Specialist** (`graph.py: make_booking_node`): a tool-calling agent bound to
-  three tools via `llm.bind_tools(...)`. It's given today's date and the business-hour
-  slot list in its system prompt, and instructed to check availability before reserving,
-  to negotiate alternatives on conflict, and to confirm via notification once booked.
-- **Input normalization**: before the Booking Specialist runs, `dateparser.search.search_dates`
-  scans the user's message for relative date/time phrases ("tomorrow at 3pm") and resolves
-  them to an absolute date, which is injected into the system prompt as a grounding fact —
-  so the agent isn't relying on its own arithmetic for "tomorrow."
-- **Negotiation**: `reserve_slot` uses a SQLite `UNIQUE(date, time)` constraint. A
-  conflicting reservation fails cleanly and returns the day's remaining open slots, which
-  the agent is instructed to offer the user rather than giving up.
-- **State persistence**: `langgraph.checkpoint.sqlite.SqliteSaver` checkpoints the full
-  graph state (all messages) to `scheduler_state.sqlite`, keyed by `thread_id`. The
-  Streamlit app stores `thread_id` in the page's URL query params (`st.query_params`), so
-  reloading the page reconnects to the same conversation and its full history.
+## Tools
 
-## Tools (mocked but functional)
-
-| Tool | What it actually does |
+| Tool | Purpose |
 |---|---|
-| `check_availability(date)` | Queries the local `scheduler.db` SQLite `bookings` table and returns open slots from a fixed business-hours list. |
-| `reserve_slot(date, time, email)` | Inserts into `bookings`; a `UNIQUE(date, time)` constraint makes double-booking fail predictably (caught and turned into a negotiation response with alternatives). |
-| `send_booking_notification(email, details)` | POSTs a JSON payload to a webhook URL — defaults to `https://httpbin.org/post` (public, free, no signup, just echoes the payload back to prove it fired). Point it at your own `https://webhook.site` URL (sidebar field) to watch confirmations arrive live in your browser. |
+| `check_availability(date)` | Check open slots for a specific date |
+| `reserve_slot(date, time, email, service_type)` | Book a new appointment |
+| `cancel_booking_tool(booking_id, email)` | Cancel an existing booking |
+| `reschedule_booking_tool(booking_id, email, new_date, new_time)` | Reschedule a booking |
+| `get_user_bookings_tool(email)` | Retrieve all bookings for an email |
+| `get_service_types()` | List available service types |
+| `send_booking_notification(email, details)` | Send confirmation notifications |
 
-## Project structure
+## Project Structure
 
 ```
 gigacorp-scheduler/
-├── app.py                          # Streamlit UI
-├── graph.py                        # LangGraph state machine (both agents + routing)
-├── tools.py                        # The three tools
-├── db.py                           # SQLite helpers (bookings table)
+├── app.py                          # Modern Streamlit UI
+├── graph.py                        # Enhanced LangGraph workflow
+├── tools.py                        # All booking tools
+├── db.py                           # Enhanced SQLite database layer
 ├── requirements.txt
-├── runtime.txt                     # pins Python 3.11 for host compatibility
+├── runtime.txt
 ├── .streamlit/secrets.toml.example
 └── README.md
 ```
 
-## Run it locally
+## Run Locally
 
 ```bash
-cd gigacorp-scheduler
+# 1. Create virtual environment
 python -m venv venv
-source venv/bin/activate        # Windows: venv\Scripts\activate
+
+# 2. Activate
+# Windows:
+venv\Scripts\activate
+# Mac/Linux:
+source venv/bin/activate
+
+# 3. Install dependencies
 pip install -r requirements.txt
 
+# 4. Set up secrets
 cp .streamlit/secrets.toml.example .streamlit/secrets.toml
-# edit .streamlit/secrets.toml and add a key for whichever provider you'll use
+# Edit secrets.toml and add your API keys
 
+# 5. Run
 streamlit run app.py
 ```
 
-Pick a provider in the sidebar — **Groq (free)** requires no payment method at all: get a
-key at [console.groq.com](https://console.groq.com) → API Keys.
+## Get an API Key
 
-### Try it
-- **General**: "What are your business hours?" — answered directly, no tools touched.
-- **Booking**: "Book me an appointment tomorrow at 10am, my email is jane@example.com" —
-  the Booking Specialist checks availability, reserves the slot, and sends a
-  notification. Expand the "🔧 Tool call" sections to see exactly what each tool
-  returned.
-- **Negotiation**: book the same date/time twice (e.g. from two browser tabs, or just ask
-  again) — the second attempt will hit the conflict and the agent will offer you an
-  alternative slot instead of failing.
-- **Refresh-safe memory**: refresh the page — your conversation and thread ID (visible in
-  the URL) stay intact, pulled straight from `scheduler_state.sqlite`.
+- **Groq (Free, Recommended)**: https://console.groq.com/keys
+- **OpenAI**: https://platform.openai.com/api-keys
+- **Anthropic**: https://console.anthropic.com/settings/keys
 
-## Deploy for free
+## Usage Examples
 
-Same process as the support-assistant project — push to GitHub, then deploy on
-**Streamlit Community Cloud** (share.streamlit.io): New app → pick this repo → main file
-`app.py` → Advanced settings → Python 3.11 → add your API key secret → Deploy.
+- **Book an appointment**: "Book a strategy session tomorrow at 2pm, my email is test@example.com"
+- **View bookings**: "Show me my bookings for test@example.com"
+- **Cancel booking**: "Cancel booking #1 for test@example.com"
+- **Ask a question**: "What services do you offer?"
 
-Note: Streamlit Community Cloud's filesystem is ephemeral on redeploys/reboots — the
-SQLite files (`scheduler.db`, `scheduler_state.sqlite`) will reset if the app restarts.
-For this assignment's purposes that's expected; for real production use you'd point these
-at a persistent database instead.
+## Deploy for Free
+
+Deploy on **Streamlit Community Cloud**:
+1. Push to GitHub
+2. Go to https://share.streamlit.io
+3. Create new app and select your repo
+4. Set main file to `app.py`
+5. Advanced Settings: Python 3.11, add your API keys as secrets
+6. Deploy!
