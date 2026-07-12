@@ -143,12 +143,45 @@ def get_service_types() -> str:
 
 @tool
 def send_booking_notification(email: str, details: str) -> str:
-    """Send a mock booking confirmation notification.
+    """Send a booking confirmation notification (either via webhook or real email).
 
     Args:
         email: The recipient's email address.
         details: A short human-readable summary of the booking.
     """
+    # First, try to send real email if SendGrid API key is available
+    sendgrid_api_key = os.environ.get("SENDGRID_API_KEY")
+    from_email = os.environ.get("FROM_EMAIL", "notifications@gigacorp.com")
+    
+    if sendgrid_api_key:
+        try:
+            from sendgrid import SendGridAPIClient
+            from sendgrid.helpers.mail import Mail
+            
+            message = Mail(
+                from_email=from_email,
+                to_emails=email,
+                subject="Your GigaCorp Appointment Confirmation",
+                html_content=f"""
+                <h1>Appointment Confirmed!</h1>
+                <p>Hi there,</p>
+                <p>Your appointment has been booked successfully:</p>
+                <p><strong>{details}</strong></p>
+                <p>Thanks for booking with GigaCorp!</p>
+                """
+            )
+            sg = SendGridAPIClient(sendgrid_api_key)
+            response = sg.send(message)
+            return json.dumps({
+                "success": True,
+                "method": "email",
+                "status_code": response.status_code
+            })
+        except Exception as e:
+            # If email fails, fall back to webhook
+            pass
+    
+    # Fallback to webhook (demo mode)
     payload = {
         "to": email,
         "details": details,
@@ -158,7 +191,8 @@ def send_booking_notification(email: str, details: str) -> str:
         resp = requests.post(WEBHOOK_URL, json=payload, timeout=6)
         return json.dumps({
             "success": resp.ok,
-            "webhook_status_code": resp.status_code,
+            "method": "webhook",
+            "status_code": resp.status_code,
             "webhook_url": WEBHOOK_URL,
         })
     except requests.RequestException as e:

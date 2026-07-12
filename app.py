@@ -73,14 +73,31 @@ api_key = st.sidebar.text_input(
 
 # Webhook
 st.sidebar.divider()
+st.sidebar.subheader("Notification Settings")
 webhook_url = st.sidebar.text_input(
-    "Notification Webhook URL (optional)",
+    "Notification webhook URL (optional)",
     value="",
     placeholder="https://webhook.site/your-url"
 )
 if webhook_url:
-    import os
     os.environ["WEBHOOK_URL"] = webhook_url
+
+sendgrid_api_key = st.sidebar.text_input(
+    "SendGrid API Key (for real emails, optional)",
+    value="",
+    type="password",
+    placeholder="SG.xxx..."
+)
+if sendgrid_api_key:
+    os.environ["SENDGRID_API_KEY"] = sendgrid_api_key
+
+from_email = st.sidebar.text_input(
+    "From Email (for real emails, optional)",
+    value="",
+    placeholder="you@example.com"
+)
+if from_email:
+    os.environ["FROM_EMAIL"] = from_email
 
 # Thread ID
 query_params = st.query_params
