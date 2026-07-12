@@ -5,6 +5,7 @@ Professional UI with modern features!
 
 import uuid
 import json
+import os
 from datetime import datetime, timedelta
 
 import streamlit as st
