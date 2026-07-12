@@ -98,7 +98,7 @@ def make_booking_node(llm_with_tools):
         system_prompt += (
             "- Always check availability before booking\n"
             "- If a slot is taken, offer alternatives from alternative_slots_same_day\n"
-            "- After booking/rescheduling, send a confirmation notification\n"
+            "- After booking/rescheduling/canceling, give a CLEAR, DETAILED confirmation message right here in the chat (include date, time, service type, booking ID, and email)\n"
             "- When canceling/rescheduling, verify the booking_id and email match\n"
             "- If missing info, ask the user clearly for exactly what's needed\n"
         )

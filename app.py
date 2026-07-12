@@ -4,6 +4,7 @@ Professional UI with modern features!
 """
 
 import uuid
+import json
 from datetime import datetime, timedelta
 
 import streamlit as st
@@ -184,7 +185,24 @@ with tab1:
                 i for i, m in enumerate(new_messages)
                 if isinstance(m, HumanMessage) and m.content == user_input
             )
+            # Check for tool results to show alerts
             for msg in new_messages[turn_start + 1:]:
+                if isinstance(msg, ToolMessage):
+                    try:
+                        tool_result = json.loads(msg.content)
+                        if msg.name == "reserve_slot" and tool_result.get("success"):
+                            st.success(f"""
+                            ✅ Booking Confirmed!
+                            - Booking ID: {tool_result.get('booking_id')}
+                            - Date: {tool_result.get('date')}
+                            - Time: {tool_result.get('time')}
+                            - Service: {tool_result.get('service_type')}
+                            - Email: {tool_result.get('email')}
+                            """)
+                        elif msg.name in ["cancel_booking_tool", "reschedule_booking_tool"] and tool_result.get("success"):
+                            st.success(f"✅ {tool_result.get('message')}")
+                    except:
+                        pass
                 if isinstance(msg, AIMessage) and msg.content:
                     with st.chat_message("assistant"):
                         st.markdown(msg.content)
