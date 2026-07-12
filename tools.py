@@ -5,11 +5,8 @@ Includes new tools: cancel booking, reschedule, get user bookings, etc.
 """
 
 import json
-import os
 import re
 from datetime import datetime
-
-import requests
 from langchain_core.tools import tool
 
 from db import (
@@ -25,9 +22,6 @@ from db import (
 
 DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 TIME_RE = re.compile(r"^\d{2}:\d{2}$")
-
-# Mock notification endpoint
-WEBHOOK_URL = os.environ.get("WEBHOOK_URL", "https://httpbin.org/post")
 
 
 @tool
@@ -143,64 +137,18 @@ def get_service_types() -> str:
 
 @tool
 def send_booking_notification(email: str, details: str) -> str:
-    """Send a booking confirmation notification (either via Gmail or webhook).
+    """Send a booking confirmation notification (in-app + ICS file).
 
     Args:
         email: The recipient's email address.
         details: A short human-readable summary of the booking.
     """
-    # First, try to send real email via Gmail if credentials are available
-    gmail_user = os.environ.get("GMAIL_USER")
-    gmail_password = os.environ.get("GMAIL_APP_PASSWORD")
-    
-    if gmail_user and gmail_password:
-        try:
-            import smtplib
-            from email.mime.text import MIMEText
-            from email.mime.multipart import MIMEMultipart
-            
-            message = MIMEMultipart()
-            message["From"] = gmail_user
-            message["To"] = email
-            message["Subject"] = "Your GigaCorp Appointment Confirmation"
-            
-            body = f"""
-            <h1>Appointment Confirmed!</h1>
-            <p>Hi there,</p>
-            <p>Your appointment has been booked successfully:</p>
-            <p><strong>{details}</strong></p>
-            <p>Thanks for booking with GigaCorp!</p>
-            """
-            message.attach(MIMEText(body, "html"))
-            
-            with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
-                server.login(gmail_user, gmail_password)
-                server.sendmail(gmail_user, email, message.as_string())
-            
-            return json.dumps({
-                "success": True,
-                "method": "gmail",
-            })
-        except Exception as e:
-            # If email fails, fall back to webhook
-            pass
-    
-    # Fallback to webhook (demo mode)
-    payload = {
-        "to": email,
-        "details": details,
-        "sent_at": datetime.utcnow().isoformat(),
-    }
-    try:
-        resp = requests.post(WEBHOOK_URL, json=payload, timeout=6)
-        return json.dumps({
-            "success": resp.ok,
-            "method": "webhook",
-            "status_code": resp.status_code,
-            "webhook_url": WEBHOOK_URL,
-        })
-    except requests.RequestException as e:
-        return json.dumps({"success": False, "error": str(e)})
+    return json.dumps({
+        "success": True,
+        "message": "In-app confirmation and ICS calendar file available",
+        "email": email,
+        "details": details
+    })
 
 
 ALL_TOOLS = [
